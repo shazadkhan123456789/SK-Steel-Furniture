@@ -37,12 +37,7 @@ const ProductCard = ({ product }) => {
           </div>
         </div>
         
-        <div className="product-footer">
-          <div className="product-id">ID: {product.id}</div>
-          <div className="profit-badge">
-            {profitMargin > 1000 ? 'High Profit' : 'Good Profit'}
-          </div>
-        </div>
+        
       </div>
     </div>
   );
