@@ -1,0 +1,107 @@
+name: Process Orders - GitHub Issues
+
+on:
+  issues:
+    types: [opened, labeled]
+  workflow_dispatch:
+
+jobs:
+  process-order:
+    runs-on: ubuntu-latest
+    if: |
+      (github.event_name == 'issues' && github.event.action == 'opened' && contains(github.event.issue.labels.*.name, 'order')) ||
+      (github.event_name == 'issues' && github.event.action == 'labeled' && github.event.label.name == 'order') ||
+      github.event_name == 'workflow_dispatch'
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Extract order details from issue
+      id: extract-order
+      run: |
+        ISSUE_TITLE="${{ github.event.issue.title }}"
+        ISSUE_BODY="${{ github.event.issue.body }}"
+        ISSUE_NUMBER="${{ github.event.issue.number }}"
+        ISSUE_URL="${{ github.event.issue.html_url }}"
+        
+        echo "Processing Issue #$ISSUE_NUMBER: $ISSUE_TITLE"
+        
+        # Extract customer name from issue title
+        CUSTOMER_NAME=$(echo "$ISSUE_TITLE" | sed -E 's/.*ORDER: ([^-]+).*/\1/' | xargs)
+        CUSTOMER_PHONE=$(echo "$ISSUE_TITLE" | grep -oE '[0-9]{10}' | head -1)
+        TOTAL_AMOUNT=$(echo "$ISSUE_TITLE" | grep -oE '₹[0-9,]+' | head -1 | sed 's/₹//' | sed 's/,//g')
+        
+        echo "customer_name=$CUSTOMER_NAME" >> $GITHUB_OUTPUT
+        echo "customer_phone=$CUSTOMER_PHONE" >> $GITHUB_OUTPUT
+        echo "total_amount=$TOTAL_AMOUNT" >> $GITHUB_OUTPUT
+        echo "issue_number=$ISSUE_NUMBER" >> $GITHUB_OUTPUT
+        echo "issue_url=$ISSUE_URL" >> $GITHUB_OUTPUT
+
+    - name: Send email notification
+      env:
+        CUSTOMER_NAME: ${{ steps.extract-order.outputs.customer_name }}
+        CUSTOMER_PHONE: ${{ steps.extract-order.outputs.customer_phone }}
+        TOTAL_AMOUNT: ${{ steps.extract-order.outputs.total_amount }}
+        ISSUE_NUMBER: ${{ steps.extract-order.outputs.issue_number }}
+        ISSUE_URL: ${{ steps.extract-order.outputs.issue_url }}
+      run: |
+        # Create email content
+        EMAIL_SUBJECT="🛋️ GitHub Order #$ISSUE_NUMBER - $CUSTOMER_NAME"
+        
+        EMAIL_BODY="🛋️ NEW ORDER VIA GITHUB ISSUE
+
+        Order Issue: #$ISSUE_NUMBER
+        Issue URL: $ISSUE_URL
+        Order Date: $(date)
+
+        CUSTOMER DETAILS:
+        • Name: $CUSTOMER_NAME
+        • Phone: $CUSTOMER_PHONE
+
+        ORDER SUMMARY:
+        • Total Amount: ₹$TOTAL_AMOUNT
+        • GitHub Issue: #$ISSUE_NUMBER
+
+        ORDER ITEMS:
+        Please check the GitHub issue for complete order details:
+        $ISSUE_URL
+
+        ---
+        Automated Order System
+        SK Steel And Furniture"
+
+                echo "Sending email for GitHub Issue #$ISSUE_NUMBER"
+                
+                # Send email using FormSubmit
+                curl -X POST "https://formsubmit.co/ajax/${{ secrets.BUSINESS_EMAIL }}" \
+                  -H "Content-Type: application/json" \
+                  -d "{
+                    \"name\": \"GitHub Order System\",
+                    \"subject\": \"$EMAIL_SUBJECT\",
+                    \"message\": \"$EMAIL_BODY\",
+                    \"_captcha\": \"false\",
+                    \"_template\": \"table\"
+                  }" && echo "✅ Email sent successfully"
+
+    - name: Add processing comment to issue
+      uses: actions/github-script@v7
+      with:
+        script: |
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: `✅ **ORDER PROCESSED AUTOMATICALLY**\n\n- 📧 Email notification sent to business team\n- 🕒 Processed at: ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}\n- 🔄 Next: Sales team will contact customer\n\n*Automated by GitHub Actions*`
+          })
+
+    - name: Update issue labels
+      uses: actions/github-script@v7
+      with:
+        script: |
+          github.rest.issues.update({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            labels: ['order', 'processed', 'automated']
+          })
