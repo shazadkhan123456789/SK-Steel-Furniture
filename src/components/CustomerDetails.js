@@ -13,25 +13,34 @@ const CustomerDetails = ({ onBack }) => {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const generateOrderData = () => {
-  return {
-    id: `order-${Date.now()}`,
-    customer: formData,
-    items: cartItems.map(item => ({
-      id: item.id,
-      name: item.name,
-      material: item.material,
-      quantity: item.quantity,
-      unitPrice: item.retailPrice,
-      totalPrice: item.retailPrice * item.quantity
-    })),
-    summary: {
-      totalItems: cartItems.reduce((sum, item) => sum + item.quantity, 0),
-      totalAmount: getCartTotal(),
-      orderDate: new Date().toISOString()
-    }
+  // GitHub configuration - UPDATE owner and repo only!
+  const GITHUB_CONFIG = {
+    owner: 'shazadkhan123456789', // Your GitHub username
+    repo: 'SK-Steel-Furniture',   // Your repository name
+    branch: 'main'                // Your default branch
+    // Token will be used from environment variable
   };
-};
+
+  const generateOrderData = () => {
+    return {
+      id: `order-${Date.now()}`,
+      customer: formData,
+      items: cartItems.map(item => ({
+        id: item.id,
+        name: item.name,
+        material: item.material,
+        quantity: item.quantity,
+        unitPrice: item.retailPrice,
+        totalPrice: item.retailPrice * item.quantity
+      })),
+      summary: {
+        totalItems: cartItems.reduce((sum, item) => sum + item.quantity, 0),
+        totalAmount: getCartTotal(),
+        orderDate: new Date().toISOString()
+      }
+    };
+  };
+
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({
@@ -60,112 +69,134 @@ const CustomerDetails = ({ onBack }) => {
     return true;
   };
 
-  const generateOrderEmail = () => {
-    const orderDetails = cartItems.map(item => 
-      `• ${item.name} (${item.material}) - Qty: ${item.quantity} - ₹${item.retailPrice * item.quantity}`
-    ).join('\n');
+  const createFileInGitHub = async (fileName, content) => {
+    // Get token from environment variable (set in GitHub Pages build)
+    const token = process.env.REACT_APP_GH_TOKEN;
+    
+    if (!token) {
+      throw new Error('GitHub token not configured');
+    }
 
-    return `
-New Order Received - SK Steel And Furniture
+    const response = await fetch(
+      `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/contents/orders/pending/${fileName}`,
+      {
+        method: 'PUT',
+        headers: {
+          'Authorization': `token ${token}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/vnd.github.v3+json'
+        },
+        body: JSON.stringify({
+          message: `📦 New order: ${formData.name} - ${formData.phone}`,
+          content: btoa(unescape(encodeURIComponent(content))),
+          branch: GITHUB_CONFIG.branch
+        })
+      }
+    );
 
-Customer Details:
-Name: ${formData.name}
-Address: ${formData.address}
-Pincode: ${formData.pincode}
-Phone: ${formData.phone}
-GST No: ${formData.gstNo || 'Not Provided'}
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || `GitHub API error: ${response.status}`);
+    }
 
-Order Details:
-${orderDetails}
-
-Total Amount: ₹${getCartTotal().toLocaleString()}
-
-Order Date: ${new Date().toLocaleString()}
-    `.trim();
+    return await response.json();
   };
 
-const handleSubmit = async (e) => {
-  e.preventDefault();
-  
-  if (!validateForm()) return;
-
-  setIsSubmitting(true);
-
-  try {
-    const orderData = generateOrderData();
-    const orderContent = JSON.stringify(orderData, null, 2);
-    const fileName = `order-${Date.now()}.json`;
+  const handleSubmit = async (e) => {
+    e.preventDefault();
     
-    // GitHub repository details
-    const repoOwner = 'shazadkhan123456789'; // Your GitHub username
-    const repoName = 'SK-Steel-Furniture';   // Your repository name
-    const filePath = `orders/pending/${fileName}`;
-    
-    // Create file via GitHub API
-    const response = await fetch(`https://api.github.com/repos/${repoOwner}/${repoName}/contents/${filePath}`, {
-      method: 'PUT',
-      headers: {
-        'Authorization': `token ${process.env.REACT_APP_GH_TOKEN || 'ghp_yourtokenhere'}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        message: `Add new order: ${formData.name}`,
-        content: btoa(unescape(encodeURIComponent(orderContent))), // Base64 encode
-      })
-    });
+    if (!validateForm()) return;
 
-    if (response.ok) {
-      const result = await response.json();
+    setIsSubmitting(true);
+
+    try {
+      const orderData = generateOrderData();
+      const orderContent = JSON.stringify(orderData, null, 2);
+      const fileName = `order-${Date.now()}.json`;
+
+      console.log('Creating order file in GitHub...');
+      
+      // Create file directly in GitHub repository
+      const result = await createFileInGitHub(fileName, orderContent);
+      
+      console.log('GitHub API response:', result);
       
       alert(`
-✅ Order Placed Successfully!
+🎉 ORDER PLACED SUCCESSFULLY!
 
+✅ Order automatically created in system
+✅ Email will be sent within 2 minutes
+✅ No manual steps required
+
+Order Details:
 • Order ID: ${orderData.id}
 • Customer: ${formData.name}
+• Phone: ${formData.phone}
 • Total: ₹${getCartTotal().toLocaleString()}
+• Items: ${cartItems.length} product(s)
 
-The system will automatically send email confirmation within minutes.
+📧 Email notification is being sent automatically...
+The system will process your order within 2 minutes.
+      `);
+      
+      // Clear cart and go back
+      clearCart();
+      onBack();
+      
+    } catch (error) {
+      console.error('GitHub API Error:', error);
+      
+      // Enhanced error handling
+      let errorMessage = 'Failed to create order automatically. ';
+      
+      if (error.message.includes('401') || error.message.includes('Bad credentials')) {
+        errorMessage += 'GitHub token is invalid or expired.';
+      } else if (error.message.includes('404')) {
+        errorMessage += 'Repository not found. Check owner and repo name.';
+      } else if (error.message.includes('token not configured')) {
+        errorMessage += 'GitHub token is not configured.';
+      } else {
+        errorMessage += error.message;
+      }
+      
+      // Fallback: Download file
+      const orderData = generateOrderData();
+      const orderContent = JSON.stringify(orderData, null, 2);
+      const fileName = `order-${Date.now()}.json`;
+      
+      const blob = new Blob([orderContent], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      alert(`
+⚠️ Automatic System Temporarily Unavailable
+
+${errorMessage}
+
+✅ Order created successfully locally
+📥 Order file downloaded: ${fileName}
+
+As a backup, please:
+1. Go to: https://github.com/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}
+2. Navigate to: orders/pending/
+3. Upload the downloaded file
+4. System will automatically send email
+
+This is a temporary workaround.
       `);
       
       clearCart();
       onBack();
-    } else {
-      throw new Error('Failed to create order file');
+    } finally {
+      setIsSubmitting(false);
     }
-    
-  } catch (error) {
-    console.error('Error placing order:', error);
-    
-    // Fallback: Download file manually
-    const orderData = generateOrderData();
-    const orderContent = JSON.stringify(orderData, null, 2);
-    const fileName = `order-${Date.now()}.json`;
-    
-    const blob = new Blob([orderContent], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = fileName;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    
-    alert(`
-✅ Order Data Generated!
-
-Due to technical setup, please manually upload the downloaded file to:
-https://github.com/shazadkhan123456789/SK-Steel-Furniture/tree/main/orders/pending
-
-File: ${fileName}
-    `);
-    
-    clearCart();
-    onBack();
-  } finally {
-    setIsSubmitting(false);
-  }
-};
+  };
 
   return (
     <div className="customer-details-container">
@@ -178,6 +209,35 @@ File: ${fileName}
 
       <div className="customer-form-container">
         <form onSubmit={handleSubmit} className="customer-form">
+          <div className="automated-process-info">
+            <h4>🚀 Fully Automated Process</h4>
+            <div className="process-steps">
+              <div className="process-step">
+                <span className="step-number">1</span>
+                <span className="step-text">Fill customer details</span>
+              </div>
+              <div className="process-step">
+                <span className="step-number">2</span>
+                <span className="step-text">Click "Place Order & Auto-Email"</span>
+              </div>
+              <div className="process-step">
+                <span className="step-number">3</span>
+                <span className="step-text">System automatically creates order file in GitHub</span>
+              </div>
+              <div className="process-step">
+                <span className="step-number">4</span>
+                <span className="step-text">GitHub Actions triggers automatically</span>
+              </div>
+              <div className="process-step">
+                <span className="step-number">5</span>
+                <span className="step-text">Email sent to business within 2 minutes</span>
+              </div>
+            </div>
+            <p className="process-note">
+              💡 No manual steps required - completely automated!
+            </p>
+          </div>
+
           <div className="form-group">
             <label htmlFor="name">Full Name *</label>
             <input
@@ -266,7 +326,7 @@ File: ${fileName}
             className="place-order-btn"
             disabled={isSubmitting}
           >
-            {isSubmitting ? 'Placing Order...' : 'Place Order & Send Email'}
+            {isSubmitting ? 'Creating Order Automatically...' : 'Place Order & Auto-Email'}
           </button>
         </form>
       </div>
