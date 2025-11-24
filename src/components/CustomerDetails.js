@@ -209,34 +209,6 @@ This is a temporary workaround.
 
       <div className="customer-form-container">
         <form onSubmit={handleSubmit} className="customer-form">
-          <div className="automated-process-info">
-            <h4>🚀 Fully Automated Process</h4>
-            <div className="process-steps">
-              <div className="process-step">
-                <span className="step-number">1</span>
-                <span className="step-text">Fill customer details</span>
-              </div>
-              <div className="process-step">
-                <span className="step-number">2</span>
-                <span className="step-text">Click "Place Order & Auto-Email"</span>
-              </div>
-              <div className="process-step">
-                <span className="step-number">3</span>
-                <span className="step-text">System automatically creates order file in GitHub</span>
-              </div>
-              <div className="process-step">
-                <span className="step-number">4</span>
-                <span className="step-text">GitHub Actions triggers automatically</span>
-              </div>
-              <div className="process-step">
-                <span className="step-number">5</span>
-                <span className="step-text">Email sent to business within 2 minutes</span>
-              </div>
-            </div>
-            <p className="process-note">
-              💡 No manual steps required - completely automated!
-            </p>
-          </div>
 
           <div className="form-group">
             <label htmlFor="name">Full Name *</label>
@@ -326,7 +298,7 @@ This is a temporary workaround.
             className="place-order-btn"
             disabled={isSubmitting}
           >
-            {isSubmitting ? 'Creating Order Automatically...' : 'Place Order & Auto-Email'}
+            {isSubmitting ? 'Creating Order Automatically...' : 'Place Order'}
           </button>
         </form>
       </div>
