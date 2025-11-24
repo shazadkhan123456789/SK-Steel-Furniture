@@ -6,6 +6,11 @@ on:
       - 'orders/pending/**'
   workflow_dispatch:
 
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
 jobs:
   process-order:
     runs-on: ubuntu-latest
@@ -17,17 +22,19 @@ jobs:
         token: ${{ secrets.GITHUB_TOKEN }}
         fetch-depth: 0
 
-    - name: Install jq for JSON parsing
-      run: sudo apt-get install -y jq
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 18
 
     - name: Find and process orders
       id: process-orders
       run: |
-        # Create directories
-        mkdir -p orders/processed
+        # Create directories if they don't exist
+        mkdir -p orders/pending orders/processed
         
-        # Find pending orders
-        ORDER_FILES=$(find orders/pending -name "*.json" -type f 2>/dev/null || true)
+        # Find all pending order files
+        ORDER_FILES=$(find orders/pending -name "*.json" -type f 2>/dev/null || echo "")
         
         if [ -z "$ORDER_FILES" ]; then
           echo "No pending orders found"
@@ -47,12 +54,12 @@ jobs:
           CUSTOMER_PHONE=$(echo "$ORDER_DATA" | jq -r '.customer.phone')
           TOTAL_AMOUNT=$(echo "$ORDER_DATA" | jq -r '.summary.totalAmount')
           
-          echo "Order: $ORDER_ID, Customer: $CUSTOMER_NAME, Total: ₹$TOTAL_AMOUNT"
+          echo "📦 Order: $ORDER_ID, Customer: $CUSTOMER_NAME, Total: ₹$TOTAL_AMOUNT"
           
           # Generate email content
           EMAIL_SUBJECT="🛋️ New Furniture Order - $CUSTOMER_NAME"
           
-          # Build email body step by step
+          # Build email body
           EMAIL_BODY="🛋️ NEW FURNITURE ORDER - SK Steel And Furniture
 
           ORDER ID: $ORDER_ID
@@ -73,6 +80,7 @@ jobs:
                       ITEM_NAME=$(echo "$ORDER_DATA" | jq -r ".items[$i].name")
                       ITEM_MATERIAL=$(echo "$ORDER_DATA" | jq -r ".items[$i].material")
                       ITEM_QTY=$(echo "$ORDER_DATA" | jq -r ".items[$i].quantity")
+                      ITEM_PRICE=$(echo "$ORDER_DATA" | jq -r ".items[$i].unitPrice")
                       ITEM_TOTAL=$(echo "$ORDER_DATA" | jq -r ".items[$i].totalPrice")
                       EMAIL_BODY="$EMAIL_BODY
           • $ITEM_NAME ($ITEM_MATERIAL) - Qty: $ITEM_QTY - ₹$ITEM_TOTAL"
@@ -89,28 +97,25 @@ jobs:
           Automated Order System
           SK Steel And Furniture"
 
-                    echo "📧 Attempting to send email for order: $ORDER_ID"
+                    echo "📧 Sending email for order: $ORDER_ID"
                     
-                    # Send email using FormSubmit (FREE - no setup needed)
-                    FORM_SUBMIT_RESPONSE=$(curl -s -X POST "https://formsubmit.co/ajax/shazadkhan143614361436@gmail.com" \
+                    # Send email using FormSubmit (FREE)
+                    curl -X POST "https://formsubmit.co/ajax/shazadkhan143614361436@gmail.com" \
                       -H "Content-Type: application/json" \
                       -d "{
                         \"name\": \"$CUSTOMER_NAME\",
-                        \"subject\": \"$EMAIL_SUBJECT\", 
-                        \"message\": \"$EMAIL_BODY\"
-                      }")
+                        \"subject\": \"$EMAIL_SUBJECT\",
+                        \"message\": \"$EMAIL_BODY\",
+                        \"_captcha\": \"false\",
+                        \"_template\": \"table\"
+                      }" && echo "✅ Email sent successfully via FormSubmit"
                     
-                    if echo "$FORM_SUBMIT_RESPONSE" | grep -q "success"; then
-                      echo "✅ Email sent successfully via FormSubmit"
-                    else
-                      echo "❌ FormSubmit failed: $FORM_SUBMIT_RESPONSE"
-                    fi
-                    
-                    # Move to processed regardless
+                    # Move to processed directory
                     mv "$order_file" "orders/processed/$(basename "$order_file")"
                     ((PROCESSED_COUNT++))
                     
                     echo "✅ Order $ORDER_ID processed successfully"
+                    sleep 2  # Small delay between processing orders
                   done
                   
                   echo "processed_count=$PROCESSED_COUNT" >> $GITHUB_OUTPUT
@@ -121,5 +126,5 @@ jobs:
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
         git add orders/
-        git commit -m "Process ${{ steps.process-orders.outputs.processed_count }} orders [skip ci]" || echo "No changes to commit"
+        git commit -m "✅ Processed ${{ steps.process-orders.outputs.processed_count }} order(s) [skip ci]" || echo "No changes to commit"
         git push

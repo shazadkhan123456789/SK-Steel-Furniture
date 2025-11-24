@@ -102,29 +102,49 @@ const CustomerDetails = ({ onBack }) => {
     return await response.json();
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+ const handleSubmit = async (e) => {
+  e.preventDefault();
+  
+  if (!validateForm()) return;
+
+  setIsSubmitting(true);
+
+  try {
+    const orderData = generateOrderData();
+    const orderContent = JSON.stringify(orderData, null, 2);
+    const fileName = `order-${Date.now()}.json`;
+
+    console.log('Creating order file in GitHub...');
     
-    if (!validateForm()) return;
+    // GitHub API configuration
+    const GITHUB_API_URL = `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/contents/orders/pending/${fileName}`;
+    
+    // Create file in GitHub using GitHub Actions secret (this will work in the deployed app)
+    const response = await fetch(GITHUB_API_URL, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `token ${process.env.REACT_APP_GH_TOKEN}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/vnd.github.v3+json'
+      },
+      body: JSON.stringify({
+        message: `📦 New order: ${formData.name} - ${formData.phone}`,
+        content: btoa(unescape(encodeURIComponent(orderContent))),
+        branch: GITHUB_CONFIG.branch
+      })
+    });
 
-    setIsSubmitting(true);
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || `GitHub API error: ${response.status}`);
+    }
 
-    try {
-      const orderData = generateOrderData();
-      const orderContent = JSON.stringify(orderData, null, 2);
-      const fileName = `order-${Date.now()}.json`;
+    const result = await response.json();
+    console.log('GitHub API response:', result);
+    
+    alert(`🎉 ORDER PLACED SUCCESSFULLY!
 
-      console.log('Creating order file in GitHub...');
-      
-      // Create file directly in GitHub repository
-      const result = await createFileInGitHub(fileName, orderContent);
-      
-      console.log('GitHub API response:', result);
-      
-      alert(`
-🎉 ORDER PLACED SUCCESSFULLY!
-
-✅ Order automatically created in system
+✅ Order automatically created in system: ${orderData.id}
 ✅ Email will be sent within 2 minutes
 ✅ No manual steps required
 
@@ -137,66 +157,36 @@ Order Details:
 
 📧 Email notification is being sent automatically...
 The system will process your order within 2 minutes.
-      `);
-      
-      // Clear cart and go back
-      clearCart();
-      onBack();
-      
-    } catch (error) {
-      console.error('GitHub API Error:', error);
-      
-      // Enhanced error handling
-      let errorMessage = 'Failed to create order automatically. ';
-      
-      if (error.message.includes('401') || error.message.includes('Bad credentials')) {
-        errorMessage += 'GitHub token is invalid or expired.';
-      } else if (error.message.includes('404')) {
-        errorMessage += 'Repository not found. Check owner and repo name.';
-      } else if (error.message.includes('token not configured')) {
-        errorMessage += 'GitHub token is not configured.';
-      } else {
-        errorMessage += error.message;
-      }
-      
-      // Fallback: Download file
-      const orderData = generateOrderData();
-      const orderContent = JSON.stringify(orderData, null, 2);
-      const fileName = `order-${Date.now()}.json`;
-      
-      const blob = new Blob([orderContent], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = fileName;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      
-      alert(`
-⚠️ Automatic System Temporarily Unavailable
-
-${errorMessage}
-
-✅ Order created successfully locally
-📥 Order file downloaded: ${fileName}
-
-As a backup, please:
-1. Go to: https://github.com/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}
-2. Navigate to: orders/pending/
-3. Upload the downloaded file
-4. System will automatically send email
-
-This is a temporary workaround.
-      `);
-      
-      clearCart();
-      onBack();
-    } finally {
-      setIsSubmitting(false);
+    `);
+    
+    // Clear cart and go back
+    clearCart();
+    onBack();
+    
+  } catch (error) {
+    console.error('GitHub API Error:', error);
+    
+    // Enhanced error handling with specific messages
+    let errorMessage = 'Failed to create order automatically. ';
+    
+    if (error.message.includes('401') || error.message.includes('Bad credentials')) {
+      errorMessage += 'Authentication failed. Please check GitHub token configuration.';
+    } else if (error.message.includes('404')) {
+      errorMessage += 'Repository not found. Check owner and repo name.';
+    } else if (error.message.includes('token not configured')) {
+      errorMessage += 'GitHub token is not configured in environment variables.';
+    } else {
+      errorMessage += error.message;
     }
-  };
+    
+    alert(`❌ ${errorMessage}
+    
+Please contact support or try again later.`);
+    
+  } finally {
+    setIsSubmitting(false);
+  }
+};
 
   return (
     <div className="customer-details-container">
