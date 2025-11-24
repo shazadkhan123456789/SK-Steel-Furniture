@@ -46,6 +46,27 @@ body {
   font-weight: 600;
   color: #495057;
 }
+.nav-btn {
+  padding: 10px 20px 10px  20px;
+  border: 2px solid #3498db;
+  background: white;
+  color: #3498db;
+  border-radius: 25px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  
+}
+
+.nav-btn:hover {
+  background: #3498db;
+  color: white;
+}
+
+.nav-btn.active {
+  background: #3498db;
+  color: white;
+}
 
 /* Responsive Design */
 @media (max-width: 768px) {
@@ -60,4 +81,11 @@ body {
   .app-header p {
     font-size: 1rem;
   }
+  .navigation {
+  display: flex;
+  gap: 10px;
+  margin-top: 15px;
+}
+
+
 }

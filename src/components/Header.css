@@ -81,6 +81,45 @@
   color: #7f8c8d;
   font-size: 1.1rem;
 }
+.cart-section {
+  position: relative;
+}
+
+.cart-link {
+  display: flex;
+  align-items: center;
+  text-decoration: none;
+  background-color: white;
+  font-size: 1.5rem;
+  padding: 3px 8px 3px 8px;
+  border-radius: 50%;
+  transition: background 0.3s ease;
+}
+
+.cart-link:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.cart-count {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  background: #e74c3c;
+  color: white;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  font-size: 0.8rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+}
+.header-right{
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
 
 @media (max-width: 768px) {
   .header-content {
@@ -114,4 +153,11 @@
   .company-tagline {
     font-size: 1rem;
   }
+  .header-right {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+
 }
