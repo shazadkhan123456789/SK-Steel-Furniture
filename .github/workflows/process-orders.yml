@@ -17,19 +17,14 @@ jobs:
         token: ${{ secrets.GITHUB_TOKEN }}
         fetch-depth: 0
 
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '18'
-
-    - name: Install jq
+    - name: Install jq for JSON parsing
       run: sudo apt-get install -y jq
 
     - name: Find and process orders
       id: process-orders
       run: |
+        # Create directories
         mkdir -p orders/processed
-        mkdir -p orders/failed
         
         # Find pending orders
         ORDER_FILES=$(find orders/pending -name "*.json" -type f 2>/dev/null || true)
@@ -45,30 +40,34 @@ jobs:
         for order_file in $ORDER_FILES; do
           echo "🔍 Processing: $order_file"
           
+          # Read order data
           ORDER_DATA=$(cat "$order_file")
           ORDER_ID=$(echo "$ORDER_DATA" | jq -r '.id')
           CUSTOMER_NAME=$(echo "$ORDER_DATA" | jq -r '.customer.name')
           CUSTOMER_PHONE=$(echo "$ORDER_DATA" | jq -r '.customer.phone')
-          CUSTOMER_ADDRESS=$(echo "$ORDER_DATA" | jq -r '.customer.address')
           TOTAL_AMOUNT=$(echo "$ORDER_DATA" | jq -r '.summary.totalAmount')
+          
+          echo "Order: $ORDER_ID, Customer: $CUSTOMER_NAME, Total: ₹$TOTAL_AMOUNT"
           
           # Generate email content
           EMAIL_SUBJECT="🛋️ New Furniture Order - $CUSTOMER_NAME"
-          EMAIL_BODY="🛋️ NEW FURNITURE ORDER 🛋️
+          
+          # Build email body step by step
+          EMAIL_BODY="🛋️ NEW FURNITURE ORDER - SK Steel And Furniture
 
-          Order ID: $ORDER_ID
-          Order Date: $(date)
+          ORDER ID: $ORDER_ID
+          ORDER DATE: $(date)
 
-          👤 CUSTOMER DETAILS:
+          CUSTOMER DETAILS:
           • Name: $CUSTOMER_NAME
-          • Address: $CUSTOMER_ADDRESS
+          • Address: $(echo "$ORDER_DATA" | jq -r '.customer.address')
           • Pincode: $(echo "$ORDER_DATA" | jq -r '.customer.pincode')
           • Phone: $CUSTOMER_PHONE
           • GST: $(echo "$ORDER_DATA" | jq -r '.customer.gstNo // "Not Provided"')
 
-          🛒 ORDER ITEMS:"
-                    
-                    # Add order items
+          ORDER ITEMS:"
+
+                    # Add each order item
                     ITEM_COUNT=$(echo "$ORDER_DATA" | jq -r '.items | length')
                     for i in $(seq 0 $(($ITEM_COUNT - 1))); do
                       ITEM_NAME=$(echo "$ORDER_DATA" | jq -r ".items[$i].name")
@@ -78,28 +77,36 @@ jobs:
                       EMAIL_BODY="$EMAIL_BODY
           • $ITEM_NAME ($ITEM_MATERIAL) - Qty: $ITEM_QTY - ₹$ITEM_TOTAL"
                     done
-                    
+
+                    # Add summary
                     EMAIL_BODY="$EMAIL_BODY
 
-          💰 ORDER SUMMARY:
+          ORDER SUMMARY:
           • Total Items: $(echo "$ORDER_DATA" | jq -r '.summary.totalItems')
           • Total Amount: ₹$TOTAL_AMOUNT
 
           ---
-          SK Steel And Furniture - Automated Order System"
+          Automated Order System
+          SK Steel And Furniture"
+
+                    echo "📧 Attempting to send email for order: $ORDER_ID"
                     
-                    echo "📧 Sending email for order: $ORDER_ID"
-                    
-                    # Send email using FormSubmit (Free service)
-                    curl -X POST "https://formsubmit.co/ajax/shazadkhan143614361436@gmail.com" \
+                    # Send email using FormSubmit (FREE - no setup needed)
+                    FORM_SUBMIT_RESPONSE=$(curl -s -X POST "https://formsubmit.co/ajax/shazadkhan143614361436@gmail.com" \
                       -H "Content-Type: application/json" \
                       -d "{
                         \"name\": \"$CUSTOMER_NAME\",
                         \"subject\": \"$EMAIL_SUBJECT\", 
                         \"message\": \"$EMAIL_BODY\"
-                      }" && echo "✅ Email sent via FormSubmit" || echo "❌ FormSubmit failed"
+                      }")
                     
-                    # Move to processed
+                    if echo "$FORM_SUBMIT_RESPONSE" | grep -q "success"; then
+                      echo "✅ Email sent successfully via FormSubmit"
+                    else
+                      echo "❌ FormSubmit failed: $FORM_SUBMIT_RESPONSE"
+                    fi
+                    
+                    # Move to processed regardless
                     mv "$order_file" "orders/processed/$(basename "$order_file")"
                     ((PROCESSED_COUNT++))
                     
